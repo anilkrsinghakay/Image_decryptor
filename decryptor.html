@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Decrypt Rail Fence Stego Image</title>
+<style>
+  body{font-family:system-ui,Arial;background:#f8fafc;color:#0f172a;padding:20px;text-align:center}
+  h1{margin-bottom:20px}
+  input[type="number"],input[type="file"]{margin:10px 0;padding:6px}
+  button{padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:6px;
+         cursor:pointer;font-size:15px}
+  button:hover{background:#1e40af}
+  #result{margin-top:20px;font-weight:bold;color:green;white-space:pre-wrap}
+</style>
+</head>
+<body>
+  <h1>Decrypt Rail Fence Stego Image</h1>
+  <input type="file" id="imageInput" accept="image/png,image/bmp"><br>
+  <label>Number of Rails:
+    <input type="number" id="rails" min="2" value="2">
+  </label><br>
+  <button onclick="decryptImage()">Decrypt</button>
+
+  <div id="result"></div>
+
+<script>
+function railFenceDecrypt(cipher, rails){
+    if(rails < 2) return cipher;
+    let pattern = [], rail = 0, dir = 1;
+    for(let i=0;i<cipher.length;i++){
+        pattern.push(rail);
+        rail += dir;
+        if(rail === 0 || rail === rails-1) dir *= -1;
+    }
+    const counts = Array.from({length:rails},(_,r)=>pattern.filter(x=>x===r).length);
+    let railsData=[], idx=0;
+    for(const c of counts){
+        railsData.push(cipher.slice(idx,idx+c).split(''));
+        idx += c;
+    }
+    return pattern.map(r=>railsData[r].shift()).join('');
+}
+
+function bitsToText(bits){
+    let chars=[];
+    for(let i=0;i<bits.length;i+=8){
+        chars.push(String.fromCharCode(parseInt(bits.slice(i,i+8),2)));
+    }
+    return chars.join('');
+}
+
+function decryptImage(){
+    const file = document.getElementById('imageInput').files[0];
+    const rails = parseInt(document.getElementById('rails').value,10);
+    if(!file){ alert("Please choose an image."); return; }
+
+    const reader = new FileReader();
+    reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img,0,0);
+            const data = ctx.getImageData(0,0,img.width,img.height).data;
+
+            let bits = '';
+            for(let i=0;i<data.length;i++){
+                bits += (data[i] & 1);
+                if(bits.endsWith('1111111111111110')) break;
+            }
+            bits = bits.slice(0,-16); // remove end marker
+            const cipher = bitsToText(bits);
+            const plain = railFenceDecrypt(cipher, rails);
+            document.getElementById('result').textContent =
+              `Ciphertext: ${cipher}\nDecrypted Message: ${plain}`;
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+</script>
+</body>
+</html>
