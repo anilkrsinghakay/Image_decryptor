@@ -30,50 +30,48 @@
   <button onclick="decryptImage()">Decrypt</button>
 
   <div id="result"></div>
-
   <canvas id="canvas" style="display:none;"></canvas>
 
   <script>
     // ==============================
     // Rail Fence Decrypt
     // ==============================
-function railFenceDecrypt(cipher, rails) {
-  if (rails < 2) return cipher;
+    function railFenceDecrypt(cipher, rails) {
+      if (rails < 2) return cipher;
 
-  // Step 1: Generate zigzag pattern
-  let pattern = [];
-  let rail = 0, direction = 1;
-  for (let i = 0; i < cipher.length; i++) {
-    pattern.push(rail);
-    rail += direction;
-    if (rail === 0 || rail === rails - 1) direction *= -1;
-  }
+      // Step 1: Generate zigzag pattern
+      let pattern = [];
+      let rail = 0, direction = 1;
+      for (let i = 0; i < cipher.length; i++) {
+        pattern.push(rail);
+        rail += direction;
+        if (rail === 0 || rail === rails - 1) direction *= -1;
+      }
 
-  // Step 2: Count chars per rail
-  let counts = Array(rails).fill(0);
-  pattern.forEach(r => counts[r]++);
+      // Step 2: Count characters per rail
+      let counts = Array(rails).fill(0);
+      pattern.forEach(r => counts[r]++);
 
-  // Step 3: Slice ciphertext into rail arrays
-  let railsText = [];
-  let idx = 0;
-  for (let r = 0; r < rails; r++) {
-    railsText[r] = cipher.slice(idx, idx + counts[r]).split("");
-    idx += counts[r];
-  }
+      // Step 3: Slice ciphertext into rail arrays
+      let railsText = [];
+      let idx = 0;
+      for (let r = 0; r < rails; r++) {
+        railsText[r] = cipher.slice(idx, idx + counts[r]).split("");
+        idx += counts[r];
+      }
 
-  // Step 4: Rebuild plaintext by following zigzag
-  let result = "";
-  for (let r of pattern) {
-    result += railsText[r].shift();
-  }
-  return result;
-}
-
+      // Step 4: Reconstruct plaintext
+      let result = "";
+      for (let r of pattern) {
+        result += railsText[r].shift();
+      }
+      return result;
+    }
 
     // ==============================
-    // Extract LSB Text
+    // Extract LSB Text from Image
     // ==============================
-    function extractTextFromImage(image, rails) {
+    function extractTextFromImage(image) {
       let canvas = document.getElementById("canvas");
       let ctx = canvas.getContext("2d");
 
@@ -84,22 +82,25 @@ function railFenceDecrypt(cipher, rails) {
       let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       let bits = "";
 
-      for (let i = 0; i < imgData.length; i++) {
-        bits += (imgData[i] & 1).toString();
+      // Process R, G, B channels only (skip alpha)
+      for (let i = 0; i < imgData.length; i += 4) {
+        bits += (imgData[i] & 1).toString();     // Red
+        bits += (imgData[i+1] & 1).toString();   // Green
+        bits += (imgData[i+2] & 1).toString();   // Blue
+
         if (bits.endsWith("1111111111111110")) {
-          bits = bits.slice(0, -16); // remove marker
+          bits = bits.slice(0, -16); // remove 16-bit marker
           break;
         }
       }
 
+      // Convert bits to characters
       let chars = [];
       for (let i = 0; i < bits.length; i += 8) {
         chars.push(String.fromCharCode(parseInt(bits.slice(i, i+8), 2)));
       }
 
-      let ciphertext = chars.join("");
-      let plaintext = railFenceDecrypt(ciphertext, rails);
-      return {ciphertext, plaintext};
+      return chars.join("");
     }
 
     // ==============================
@@ -121,7 +122,9 @@ function railFenceDecrypt(cipher, rails) {
 
       let img = new Image();
       img.onload = function() {
-        let {ciphertext, plaintext} = extractTextFromImage(img, rails);
+        let ciphertext = extractTextFromImage(img);
+        let plaintext = railFenceDecrypt(ciphertext, rails);
+
         resultDiv.innerText =
           "Rail Key      : " + rails + "\n" +
           "Ciphertext    : " + ciphertext + "\n" +
