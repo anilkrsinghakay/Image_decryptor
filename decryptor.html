@@ -1,86 +1,130 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Decrypt Rail Fence Stego Image</title>
-<style>
-  body{font-family:system-ui,Arial;background:#f8fafc;color:#0f172a;padding:20px;text-align:center}
-  h1{margin-bottom:20px}
-  input[type="number"],input[type="file"]{margin:10px 0;padding:6px}
-  button{padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:6px;
-         cursor:pointer;font-size:15px}
-  button:hover{background:#1e40af}
-  #result{margin-top:20px;font-weight:bold;color:green;white-space:pre-wrap}
-</style>
+  <meta charset="UTF-8">
+  <title>Image Decryptor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 40px;
+    }
+    input, button {
+      margin: 10px;
+      padding: 8px;
+      font-size: 16px;
+    }
+    #result {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ccc;
+      display: inline-block;
+      white-space: pre-wrap;
+    }
+  </style>
 </head>
 <body>
-  <h1>Decrypt Rail Fence Stego Image</h1>
-  <input type="file" id="imageInput" accept="image/png,image/bmp"><br>
-  <label>Number of Rails:
-    <input type="number" id="rails" min="2" value="2">
-  </label><br>
+  <h1>🔐 Image Decryptor</h1>
+  <input type="file" id="stegoImage" accept="image/*"><br>
+  <input type="number" id="rails" placeholder="Enter Rail Key (rails)"><br>
   <button onclick="decryptImage()">Decrypt</button>
 
   <div id="result"></div>
 
-<script>
-function railFenceDecrypt(cipher, rails){
-    if(rails < 2) return cipher;
-    let pattern = [], rail = 0, dir = 1;
-    for(let i=0;i<cipher.length;i++){
+  <canvas id="canvas" style="display:none;"></canvas>
+
+  <script>
+    // ==============================
+    // Rail Fence Decrypt
+    // ==============================
+    function railFenceDecrypt(cipher, rails) {
+      if (rails < 2) return cipher;
+
+      let pattern = [];
+      let rail = 0, direction = 1;
+
+      for (let i = 0; i < cipher.length; i++) {
         pattern.push(rail);
-        rail += dir;
-        if(rail === 0 || rail === rails-1) dir *= -1;
-    }
-    const counts = Array.from({length:rails},(_,r)=>pattern.filter(x=>x===r).length);
-    let railsData=[], idx=0;
-    for(const c of counts){
-        railsData.push(cipher.slice(idx,idx+c).split(''));
+        rail += direction;
+        if (rail === 0 || rail === rails - 1) direction *= -1;
+      }
+
+      let counts = Array(rails).fill(0);
+      pattern.forEach(r => counts[r]++);
+
+      let railsText = [];
+      let idx = 0;
+      for (let c of counts) {
+        railsText.push(cipher.slice(idx, idx + c).split(""));
         idx += c;
+      }
+
+      let result = "";
+      for (let r of pattern) {
+        result += railsText[r].shift();
+      }
+      return result;
     }
-    return pattern.map(r=>railsData[r].shift()).join('');
-}
 
-function bitsToText(bits){
-    let chars=[];
-    for(let i=0;i<bits.length;i+=8){
-        chars.push(String.fromCharCode(parseInt(bits.slice(i,i+8),2)));
+    // ==============================
+    // Extract LSB Text
+    // ==============================
+    function extractTextFromImage(image, rails) {
+      let canvas = document.getElementById("canvas");
+      let ctx = canvas.getContext("2d");
+
+      canvas.width = image.width;
+      canvas.height = image.height;
+      ctx.drawImage(image, 0, 0);
+
+      let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let bits = "";
+
+      for (let i = 0; i < imgData.length; i++) {
+        bits += (imgData[i] & 1).toString();
+        if (bits.endsWith("1111111111111110")) {
+          bits = bits.slice(0, -16); // remove marker
+          break;
+        }
+      }
+
+      let chars = [];
+      for (let i = 0; i < bits.length; i += 8) {
+        chars.push(String.fromCharCode(parseInt(bits.slice(i, i+8), 2)));
+      }
+
+      let ciphertext = chars.join("");
+      let plaintext = railFenceDecrypt(ciphertext, rails);
+      return {ciphertext, plaintext};
     }
-    return chars.join('');
-}
 
-function decryptImage(){
-    const file = document.getElementById('imageInput').files[0];
-    const rails = parseInt(document.getElementById('rails').value,10);
-    if(!file){ alert("Please choose an image."); return; }
+    // ==============================
+    // Handle File + Decrypt
+    // ==============================
+    function decryptImage() {
+      let fileInput = document.getElementById("stegoImage");
+      let rails = parseInt(document.getElementById("rails").value);
+      let resultDiv = document.getElementById("result");
 
-    const reader = new FileReader();
-    reader.onload = e => {
-        const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img,0,0);
-            const data = ctx.getImageData(0,0,img.width,img.height).data;
+      if (!fileInput.files[0]) {
+        alert("Please select a stego image first.");
+        return;
+      }
+      if (!rails || rails < 2) {
+        alert("Please enter a valid rail key (>=2).");
+        return;
+      }
 
-            let bits = '';
-            for(let i=0;i<data.length;i++){
-                bits += (data[i] & 1);
-                if(bits.endsWith('1111111111111110')) break;
-            }
-            bits = bits.slice(0,-16); // remove end marker
-            const cipher = bitsToText(bits);
-            const plain = railFenceDecrypt(cipher, rails);
-            document.getElementById('result').textContent =
-              `Ciphertext: ${cipher}\nDecrypted Message: ${plain}`;
-        };
-        img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-}
-</script>
+      let img = new Image();
+      img.onload = function() {
+        let {ciphertext, plaintext} = extractTextFromImage(img, rails);
+        resultDiv.innerText =
+          "Rail Key      : " + rails + "\n" +
+          "Ciphertext    : " + ciphertext + "\n" +
+          "Decrypted Text: " + plaintext;
+      };
+      img.src = URL.createObjectURL(fileInput.files[0]);
+    }
+  </script>
 </body>
 </html>
