@@ -2,33 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Image Decryptor</title>
+  <title>Efficient Image Decryptor</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      margin: 40px;
-    }
-    input, button {
-      margin: 10px;
-      padding: 8px;
-      font-size: 16px;
-    }
-    #result {
-      margin-top: 20px;
-      padding: 15px;
-      border: 1px solid #ccc;
-      display: inline-block;
-      white-space: pre-wrap;
-    }
+    body { font-family: Arial; text-align: center; margin: 40px; }
+    input, button { margin: 10px; padding: 8px; font-size: 16px; }
+    #result { margin-top: 20px; padding: 15px; border: 1px solid #ccc; display: inline-block; white-space: pre-wrap; }
   </style>
 </head>
 <body>
-  <h1>🔐 Image Decryptor</h1>
+  <h1>🔐 Efficient Image Decryptor</h1>
   <input type="file" id="stegoImage" accept="image/*"><br>
   <input type="number" id="rails" placeholder="Enter Rail Key (rails)"><br>
   <button onclick="decryptImage()">Decrypt</button>
-
   <div id="result"></div>
   <canvas id="canvas" style="display:none;"></canvas>
 
@@ -39,32 +24,24 @@
     function railFenceDecrypt(cipher, rails) {
       if (rails < 2) return cipher;
 
-      // Step 1: Generate zigzag pattern
-      let pattern = [];
-      let rail = 0, direction = 1;
+      let pattern = [], rail = 0, direction = 1;
       for (let i = 0; i < cipher.length; i++) {
         pattern.push(rail);
         rail += direction;
         if (rail === 0 || rail === rails - 1) direction *= -1;
       }
 
-      // Step 2: Count characters per rail
       let counts = Array(rails).fill(0);
       pattern.forEach(r => counts[r]++);
 
-      // Step 3: Slice ciphertext into rail arrays
-      let railsText = [];
-      let idx = 0;
+      let railsText = [], idx = 0;
       for (let r = 0; r < rails; r++) {
         railsText[r] = cipher.slice(idx, idx + counts[r]).split("");
         idx += counts[r];
       }
 
-      // Step 4: Reconstruct plaintext
       let result = "";
-      for (let r of pattern) {
-        result += railsText[r].shift();
-      }
+      for (let r of pattern) result += railsText[r].shift();
       return result;
     }
 
@@ -72,63 +49,59 @@
     // Extract LSB Text from Image
     // ==============================
     function extractTextFromImage(image) {
-      let canvas = document.getElementById("canvas");
-      let ctx = canvas.getContext("2d");
-
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
       canvas.width = image.width;
       canvas.height = image.height;
       ctx.drawImage(image, 0, 0);
 
-      let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      let bits = "";
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const bitsArr = [];
+      const endMarker = "1111111111111110";
+      let markerFound = false;
 
-      // Process R, G, B channels only (skip alpha)
-      for (let i = 0; i < imgData.length; i += 4) {
-        bits += (imgData[i] & 1).toString();     // Red
-        bits += (imgData[i+1] & 1).toString();   // Green
-        bits += (imgData[i+2] & 1).toString();   // Blue
-
-        if (bits.endsWith("1111111111111110")) {
-          bits = bits.slice(0, -16); // remove 16-bit marker
-          break;
+      for (let i = 0; i < imgData.length; i += 4) { // R,G,B only
+        for (let j = 0; j < 3; j++) {
+          bitsArr.push((imgData[i + j] & 1).toString());
+          if (bitsArr.length >= endMarker.length) {
+            if (bitsArr.slice(-endMarker.length).join('') === endMarker) {
+              markerFound = true;
+              bitsArr.splice(-endMarker.length); // remove marker
+              break;
+            }
+          }
         }
+        if (markerFound) break;
       }
 
       // Convert bits to characters
-      let chars = [];
-      for (let i = 0; i < bits.length; i += 8) {
-        chars.push(String.fromCharCode(parseInt(bits.slice(i, i+8), 2)));
+      const chars = [];
+      for (let i = 0; i < bitsArr.length; i += 8) {
+        chars.push(String.fromCharCode(parseInt(bitsArr.slice(i, i + 8).join(''), 2)));
       }
 
-      return chars.join("");
+      return chars.join('');
     }
 
     // ==============================
     // Handle File + Decrypt
     // ==============================
     function decryptImage() {
-      let fileInput = document.getElementById("stegoImage");
-      let rails = parseInt(document.getElementById("rails").value);
-      let resultDiv = document.getElementById("result");
+      const fileInput = document.getElementById("stegoImage");
+      const rails = parseInt(document.getElementById("rails").value);
+      const resultDiv = document.getElementById("result");
 
-      if (!fileInput.files[0]) {
-        alert("Please select a stego image first.");
-        return;
-      }
-      if (!rails || rails < 2) {
-        alert("Please enter a valid rail key (>=2).");
-        return;
-      }
+      if (!fileInput.files[0]) { alert("Select a stego image first."); return; }
+      if (!rails || rails < 2) { alert("Enter valid rail key (>=2)."); return; }
 
-      let img = new Image();
-      img.onload = function() {
-        let ciphertext = extractTextFromImage(img);
-        let plaintext = railFenceDecrypt(ciphertext, rails);
-
+      const img = new Image();
+      img.onload = () => {
+        const ciphertext = extractTextFromImage(img);
+        const plaintext = railFenceDecrypt(ciphertext, rails);
         resultDiv.innerText =
-          "Rail Key      : " + rails + "\n" +
-          "Ciphertext    : " + ciphertext + "\n" +
-          "Decrypted Text: " + plaintext;
+          `Rail Key      : ${rails}\n` +
+          `Ciphertext    : ${ciphertext}\n` +
+          `Decrypted Text: ${plaintext}`;
       };
       img.src = URL.createObjectURL(fileInput.files[0]);
     }
